@@ -1,0 +1,339 @@
+```{r}
+# Load required packages
+library(tidyverse)
+library(lubridate)
+library(ggplot2)
+library(ggthemes)
+library(knitr)
+```
+
+```{r}
+# Read the dataset
+dat <- read.csv("hotel_bookings.csv", stringsAsFactors = FALSE)
+```
+
+
+```{r}
+# Overview of dataset structure
+str(dat)
+
+# Summary statistics
+summary(dat)
+```
+
+```{r col_lists}
+factor_cols <- c(
+      "hotel",
+      "meal",
+      "country",
+      "market_segment",
+      "distribution_channel",
+      "reserved_room_type",
+      "assigned_room_type",
+      "deposit_type",
+      "agent",
+      "company",
+      "customer_type",
+      "arrival_date_month"
+    )
+
+numeric_cols <- c(
+    'lead_time',
+    'stays_in_weekend_nights',
+    'stays_in_week_nights',
+    'adults',
+    'children',
+    'babies',
+    'previous_cancellations',
+    'previous_bookings_not_canceled',
+    'booking_changes',
+    'days_in_waiting_list',
+    'adr',
+    'required_car_parking_spaces',
+    'total_of_special_requests'
+  )
+
+```
+
+```{r clean_data}
+df <- dat %>%
+  mutate(is_canceled = as.logical(is_canceled))
+```
+
+
+```{r}
+# Convert date columns to proper date format
+dat$arrival_date_month <- tolower(dat$arrival_date_month) # Convert month names to lowercase
+dat$arrival_date_year <- as.factor(dat$arrival_date_year)
+dat$arrival_date <- ymd(paste(dat$arrival_date_year, dat$arrival_date_month, "01", sep = "-"))
+dat$reservation_status_date <- ymd(dat$reservation_status_date)
+
+
+# Remove missing values
+dat <- na.omit(dat)
+
+```
+
+```{r}
+# Plot the distribution of lead time
+ggplot(dat, aes(x = lead_time)) +
+  geom_histogram(binwidth = 50, fill = "#0073C2FF", color = "#0E4D92FF") +
+  theme_minimal() +
+  labs(x = "Lead Time", y = "Count", title = "Distribution of Lead Time")
+
+```
+
+
+```{r ADR EDA}
+# Calculate the average daily rate by market segment and hotel type
+avg_daily_rate <- dat %>%
+  group_by(market_segment, hotel) %>%
+  summarize(avg_daily_rate = mean(adr))
+
+# Create the plot
+ggplot(avg_daily_rate, aes(x = market_segment, y = avg_daily_rate, fill = hotel)) +
+  geom_bar(stat = "identity", color = "#0E4D92FF", position = position_dodge()) +
+  theme_minimal() +
+  labs(x = "Market Segment", y = "Average Daily Rate", title = "Average Daily Rate by Market Segment") +
+  scale_fill_manual(values = c("#0073C2FF", "#FF8C00FF")) +
+  guides(fill = guide_legend(title = "Hotel Type"))
+
+# Add the bar for the total average daily rate
+ggplot(total_avg_daily_rate, aes(x = market_segment, y = avg_daily_rate)) +
+  geom_bar(stat = "identity", fill = "#0E4D92FF", color = "#0E4D92FF") +
+  theme_minimal() +
+  labs(x = "Market Segment", y = "Average Daily Rate", title = "Total Average Daily Rate")
+```
+```{r ADR EDA}
+# Calculate the average daily rate by distribution channel and hotel type
+avg_daily_rate <- dat %>%
+  group_by(distribution_channel, hotel) %>%
+  summarize(avg_daily_rate = mean(adr))
+
+# Calculate the total average daily rate by distribution channel
+total_avg_daily_rate <- dat %>%
+  group_by(distribution_channel) %>%
+  summarize(avg_daily_rate = mean(adr))
+
+# Create the plot
+# Average Daily Rate by Distribution Channel and Hotel Type
+ggplot(avg_daily_rate, aes(x = distribution_channel, y = avg_daily_rate, fill = hotel)) +
+  geom_bar(stat = "identity", color = "#0E4D92FF", position = position_dodge()) +
+  theme_minimal() +
+  labs(x = "Distribution Channel", y = "Average Daily Rate", title = "Average Daily Rate by Distribution Channel") +
+  scale_fill_manual(values = c("#0073C2FF", "#FF8C00FF")) +
+  guides(fill = guide_legend(title = "Hotel Type"))
+
+# Total Average Daily Rate by Distribution Channel
+ggplot(total_avg_daily_rate, aes(x = distribution_channel, y = avg_daily_rate)) +
+  geom_bar(stat = "identity", fill = "#0E4D92FF", color = "#0E4D92FF") +
+  theme_minimal() +
+  labs(x = "Distribution Channel", y = "Average Daily Rate", title = "Total Average Daily Rate")
+```
+```{r Cancellation Rate EDA}
+# Calculate the cancellation rate by distribution channel and hotel type
+cancel_rate <- dat %>%
+  group_by(distribution_channel, hotel) %>%
+  summarize(cancelation_rate = mean(is_canceled))
+
+# Calculate the total cancellation rate by distribution channel
+total_cancel_rate <- dat %>%
+  group_by(distribution_channel) %>%
+  summarize(cancelation_rate = mean(is_canceled))
+
+# Create the plot
+# Cancellation Rate by Distribution Channel and Hotel Type
+ggplot(cancel_rate, aes(x = distribution_channel, y = cancelation_rate, fill = hotel)) +
+  geom_bar(stat = "identity", color = "#0E4D92FF", position = position_dodge()) +
+  theme_minimal() +
+  labs(x = "Distribution Channel", y = "Cancellation Rate", title = "Cancellation Rate by Distribution Channel") +
+  scale_fill_manual(values = c("#0073C2FF", "#FF8C00FF")) +
+  guides(fill = guide_legend(title = "Hotel Type"))
+
+# Total Cancellation Rate by Distribution Channel
+ggplot(total_cancel_rate, aes(x = distribution_channel, y = cancelation_rate)) +
+  geom_bar(stat = "identity", fill = "#0E4D92FF", color = "#0E4D92FF") +
+  theme_minimal() +
+  labs(x = "Distribution Channel", y = "Cancellation Rate", title = "Total Cancellation Rate")
+```
+```{r cancellation rate EDA}
+# Calculate the cancellation rate by market segment and hotel type
+cancel_rate <- dat %>%
+  group_by(market_segment, hotel) %>%
+  summarize(cancellation_rate = mean(is_canceled))
+
+# Calculate the total cancellation rate by market segment
+total_cancel_rate <- dat %>%
+  group_by(market_segment) %>%
+  summarize(cancellation_rate = mean(is_canceled))
+
+# Create the plot
+# Cancellation Rate by Market Segment and Hotel Type
+ggplot(cancel_rate, aes(x = market_segment, y = cancellation_rate, fill = hotel)) +
+  geom_bar(stat = "identity", color = "#0E4D92FF", position = position_dodge()) +
+  theme_minimal() +
+  labs(x = "Market Segment", y = "Cancellation Rate", title = "Cancellation Rate by Market Segment") +
+  scale_fill_manual(values = c("#0073C2FF", "#FF8C00FF")) +
+  guides(fill = guide_legend(title = "Hotel Type"))
+
+# Total Cancellation Rate by Market Segment
+ggplot(total_cancel_rate, aes(x = market_segment, y = cancellation_rate)) +
+  geom_bar(stat = "identity", fill = "#0E4D92FF", color = "#0E4D92FF") +
+  theme_minimal() +
+  labs(x = "Market Segment", y = "Cancellation Rate", title = "Total Cancellation Rate")
+```
+
+
+
+
+
+```{r Cancellation rate EDA}
+# Calculate cancellation rate by country
+country_cancellation <- dat %>%
+  group_by(country) %>%
+  summarize(cancellation_rate = mean(is_canceled) * 100) %>%
+  arrange(desc(cancellation_rate)) %>%
+  head(10)
+
+# Visualize top 10 cancellation rates by country
+ggplot(country_cancellation, aes(x = reorder(country, cancellation_rate), y = cancellation_rate)) +
+  geom_bar(stat = "identity", fill = "#0073C2FF", color = "#0E4D92FF") +
+  theme_minimal() +
+  labs(x = "Country", y = "Cancellation Rate (%)", title = "Top 10 Cancellation Rates by Country") +
+  coord_flip()
+
+```
+
+```{r cancellation rate EDA}
+# Analyze cancellation rate by lead time intervals
+dat$lead_time_interval <- cut(dat$lead_time, breaks = c(0, 30, 60, Inf), labels = c("0-30", "31-60", "61+"))
+lead_time_cancellation <- dat %>%
+  group_by(lead_time_interval) %>%
+  summarize(cancellation_rate = mean(is_canceled) * 100)
+
+# Visualize cancellation rate by lead time intervals
+ggplot(lead_time_cancellation, aes(x = lead_time_interval, y = cancellation_rate)) +
+  geom_bar(stat = "identity", fill = "#0073C2FF", color = "#0E4D92FF") +
+  theme_minimal() +
+  labs(x = "Lead Time Interval", y = "Cancellation Rate (%)", title = "Cancellation Rate by Lead Time Interval")
+```
+
+```{r cancellation rate EDA}
+# Analyze cancellation rate by previous cancellations
+previous_cancellation <- dat %>%
+  group_by(previous_cancellations) %>%
+  summarize(cancellation_rate = mean(is_canceled) * 100)
+
+# Visualize cancellation rate by previous cancellations
+ggplot(previous_cancellation, aes(x = previous_cancellations, y = cancellation_rate)) +
+  geom_bar(stat = "identity", fill = "#0073C2FF", color = "#0E4D92FF") +
+  theme_minimal() +
+  labs(x = "Previous Cancellations", y = "Cancellation Rate (%)", title = "Cancellation Rate by Previous Cancellations")
+```
+
+```{r seasonality EDA}
+# Convert date columns to proper date format
+dat$arrival_date_month <- tolower(dat$arrival_date_month) # Convert month names to lowercase
+dat$arrival_date_year <- as.factor(dat$arrival_date_year)
+dat$arrival_date <- ymd(paste(dat$arrival_date_year, dat$arrival_date_month, "01", sep = "-"))
+dat$reservation_status_date <- ymd(dat$reservation_status_date)
+
+# Remove missing values
+dat <- na.omit(dat)
+
+# Calculate the breakdown of bookings by arrival month and year
+booking_breakdown <- dat %>%
+  mutate(arrival_month = month(arrival_date, label = TRUE)) %>%
+  count(arrival_month, arrival_date_year)
+
+# Create the plot
+ggplot(booking_breakdown, aes(x = arrival_month, y = n, fill = arrival_date_year)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  theme_minimal() +
+  labs(x = "Month", y = "Count", title = "Breakdown of Bookings by Month and Year") +
+  scale_x_discrete(labels = month.abb) +
+  scale_fill_discrete(name = "Arrival Year")
+```
+```{r seasonlity EDA}
+# Calculate the breakdown of bookings by arrival month, year, and hotel
+booking_breakdown <- dat %>%
+  mutate(arrival_month = month(arrival_date, label = TRUE)) %>%
+  count(arrival_month, arrival_date_year, hotel)
+
+# Create the plot
+ggplot(booking_breakdown, aes(x = arrival_month, y = n, fill = hotel)) +
+  geom_bar(stat = "identity", position = "stack") +
+  theme_minimal() +
+  labs(x = "Month", y = "Count", title = "Breakdown of Bookings by Month and Hotel") +
+  scale_x_discrete(labels = month.abb) +
+  scale_fill_manual(values = c("#0073C2FF", "#FF8C00FF"), name = "Hotel Type") +
+  guides(fill = guide_legend(title = "Hotel Type"))
+```
+
+```{r seasonality EDA}
+# Calculate the breakdown of cancellations by arrival month and year
+cancellation_breakdown <- dat %>%
+  filter(is_canceled == 1) %>%
+  mutate(arrival_month = month(arrival_date, label = TRUE)) %>%
+  count(arrival_month, arrival_date_year)
+
+# Create the plot
+ggplot(cancellation_breakdown, aes(x = arrival_month, y = n, fill = arrival_date_year)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  theme_minimal() +
+  labs(x = "Month", y = "Number of Cancellations", title = "Breakdown of Cancellations by Month and Year") +
+  scale_x_discrete(labels = month.abb) +
+  scale_fill_discrete(name = "Arrival Year")
+```
+```{r seasonlity EDA}
+# Calculate the breakdown of cancellation rate by arrival month, year, and hotel
+cancellation_breakdown <- dat %>%
+  mutate(arrival_month = month(arrival_date, label = TRUE)) %>%
+  group_by(arrival_month, arrival_date_year, hotel) %>%
+  summarize(cancellation_rate = mean(is_canceled)) %>%
+  ungroup()
+
+# Create the plot
+ggplot(cancellation_breakdown, aes(x = arrival_month, y = cancellation_rate, fill = hotel)) +
+  geom_bar(stat = "identity", position = "stack") +
+  theme_minimal() +
+  labs(x = "Month", y = "Cancellation Rate", title = "Cancellation Rate by Month and Hotel") +
+  scale_x_discrete(labels = month.abb) +
+  scale_fill_manual(values = c("#0073C2FF", "#FF8C00FF"), name = "Hotel Type") +
+  guides(fill = guide_legend(title = "Hotel Type"))
+```
+
+```{r seasonlity EDA}
+# Calculate the average daily rate by arrival month and year
+adr_breakdown <- dat %>%
+  group_by(arrival_date_month, arrival_date_year) %>%
+  summarize(avg_adr = mean(adr))
+
+# Create the plot
+ggplot(adr_breakdown, aes(x = arrival_date_month, y = avg_adr, fill = arrival_date_year)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  theme_minimal() +
+  labs(x = "Month", y = "Average Daily Rate", title = "Average Daily Rate by Month and Year") +
+  scale_x_discrete(labels = month.abb) +
+  scale_fill_discrete(name = "Arrival Year")
+```
+```{r seasonlity EDA}
+# Calculate the breakdown of ADR by arrival month, year, and hotel
+adr_breakdown <- dat %>%
+  mutate(arrival_month = month(arrival_date, label = TRUE)) %>%
+  group_by(arrival_month, arrival_date_year, hotel) %>%
+  summarize(avg_adr = mean(adr)) %>%
+  ungroup()
+
+# Create the plot
+ggplot(adr_breakdown, aes(x = arrival_month, y = avg_adr, fill = hotel)) +
+  geom_bar(stat = "identity", position = "stack") +
+  theme_minimal() +
+  labs(x = "Month", y = "Average Daily Rate", title = "Average Daily Rate by Month and Hotel") +
+  scale_x_discrete(labels = month.abb) +
+  scale_fill_manual(values = c("#0073C2FF", "#FF8C00FF"), name = "Hotel Type") +
+  guides(fill = guide_legend(title = "Hotel Type"))
+
+```
+
+
