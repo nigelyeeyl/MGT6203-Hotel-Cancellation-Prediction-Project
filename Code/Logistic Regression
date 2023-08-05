@@ -1,0 +1,509 @@
+```{r setup}
+library(tidyverse)
+setwd("/Users/ying-kaihuang-local/Library/Mobile Documents/com~apple~CloudDocs/Georgia Tech Analytics/Business Analytics/Group Project")
+set.seed(42)
+```
+
+```{r load_data}
+dat <- read.csv("hotel_bookings.csv")
+```
+
+```{r}
+library(dplyr)
+
+file_path <- '/Users/ying-kaihuang-local/Library/Mobile Documents/com~apple~CloudDocs/Georgia Tech Analytics/Business Analytics/Group Project/hotel_bookings.csv'
+
+load_cleaned_df <- function(file_path) {
+  
+  df <- read.csv(file_path)
+  
+  factor_cols <- c(
+        "hotel",
+        "meal",
+        "market_segment",
+        "distribution_channel",
+        "reserved_room_type",
+        "assigned_room_type",
+        "deposit_type",
+        "customer_type",
+        "arrival_date_month"
+      )
+  logical_cols <- c(
+    'is_repeated_guest',
+    'is_canceled'
+  )
+  numeric_cols <- c(
+      'lead_time',
+      'stays_in_weekend_nights',
+      'stays_in_week_nights',
+      'adults',
+      'children',
+      'babies',
+      'previous_cancellations',
+      'previous_bookings_not_canceled',
+      'booking_changes',
+      'days_in_waiting_list',
+      'adr',
+      'required_car_parking_spaces',
+      'total_of_special_requests'
+    )
+  
+  all_cols_used <- c(logical_cols, numeric_cols, factor_cols)
+  
+  df2 <- df %>%
+    select(all_of(all_cols_used)) %>%
+    mutate(is_reserved_and_assigned_room_same = reserved_room_type == assigned_room_type) %>%
+    filter(adr < 4000, 
+           adults <= 4,
+           babies <= 2,
+           booking_changes <= 5,
+           children <= 4, 
+           days_in_waiting_list <= 400,
+           previous_bookings_not_canceled <= 10,
+           previous_cancellations <= 10, 
+           required_car_parking_spaces <= 3,
+           days_in_waiting_list <= 20,
+           stays_in_weekend_nights <= 5,
+           total_of_special_requests <= 6,
+           !(reserved_room_type %in% c('P', 'L')),
+           !(assigned_room_type %in% c('P', 'L')),
+           distribution_channel != 'Undefined') %>%
+    mutate_at(factor_cols, as.factor) %>%
+    mutate_at(logical_cols, as.logical)
+  
+  return(df2)
+}
+
+
+```
+
+```{r}
+dat <- load_cleaned_df(file_path)
+
+
+```
+
+
+```{r col_lists}
+factor_cols <- c(
+      "hotel",
+      "meal",
+      "country",
+      "market_segment",
+      "distribution_channel",
+      "reserved_room_type",
+      "assigned_room_type",
+      "deposit_type",
+      "agent",
+      "company",
+      "customer_type",
+      "arrival_date_month"
+    )
+numeric_cols <- c(
+    'lead_time',
+    'stays_in_weekend_nights',
+    'stays_in_week_nights',
+    'adults',
+    'children',
+    'babies',
+    'previous_cancellations',
+    'previous_bookings_not_canceled',
+    'booking_changes',
+    'days_in_waiting_list',
+    'adr',
+    'required_car_parking_spaces',
+    'total_of_special_requests'
+  )
+
+
+factor_cols_short <- c(
+        "hotel",
+        "meal",
+        "market_segment",
+        "distribution_channel",
+        "reserved_room_type",
+        "assigned_room_type",
+        "deposit_type",
+        "customer_type",
+        "arrival_date_month"
+    )
+```
+
+```{r clean_data}
+df <- dat %>%
+  mutate(is_canceled = as.logical(is_canceled))
+```
+
+
+```{r numeric_violin_plots}
+show_numeric_dist <- function(df) {
+  to_vis <- df %>%
+    select(is_canceled, all_of(numeric_cols)) %>%
+    pivot_longer(-is_canceled)
+  
+  ggplot(to_vis, aes(fill = is_canceled, x = value)) +
+    geom_histogram(binwidth = 1) +
+    facet_wrap(vars(name), scales = 'free')
+}
+    
+df %>%
+  filter(adr < 4000, 
+         adults < 10,
+         babies < 3
+         ) %>%
+  show_numeric_dist()
+```
+
+```{r}
+df <- df %>%
+  filter(adr < 4000, 
+         adults <= 4,
+         babies <= 2,
+         booking_changes <= 5,
+         children <= 4, 
+         days_in_waiting_list <= 400,
+         previous_bookings_not_canceled <= 10,
+         previous_cancellations <= 10, 
+         required_car_parking_spaces <= 3,
+         days_in_waiting_list <= 20,
+         stays_in_weekend_nights <= 5,
+         total_of_special_requests <= 6)
+df %>%
+  show_numeric_dist()
+         
+```
+
+## Only use numerical variables to fit logistic regression
+```{r}
+df <- df %>%
+  select(is_canceled, all_of(numeric_cols)) %>%
+  mutate(id = row_number())
+```
+
+```{r}
+df_train <- df %>%
+  sample_frac(.8)
+df_test <- anti_join(df, df_train, by = 'id')
+  
+model <-
+  glm(
+    is_canceled ~ .,
+    family = binomial(link = "logit"),
+    data = df_train
+  )
+summary(model)
+```
+
+```{r}
+prob_cancellation <- predict(model, df_test)
+```
+
+```{r}
+performance_summary <- function(actual, prob_prediction, cutoff_value = 0.5) {
+  df <- tibble(actual, prob_prediction) %>%
+    mutate(prediction = prob_prediction >= cutoff_value)
+  
+  TP <- df %>% filter(actual, prediction) %>% nrow() 
+  TN <- df %>% filter(!actual, !prediction) %>% nrow()
+  FP <- df %>% filter(!actual, prediction) %>% nrow() 
+  AP <- df %>% filter(actual) %>% nrow() 
+  AN <- df %>% filter(!actual) %>% nrow()
+  N <- nrow(df)
+  
+  
+  summary_df <- tibble(
+      sensitivity = TP / AP,
+      specificity = TN / AN,
+      FP_Rate = 1 - specificity,
+      precision = TP / (TP + FP),
+      accuracy = (TP + TN) / N) %>%
+    pivot_longer(cols = everything()) %>%
+    mutate(value = scales::percent(value))
+  
+  
+  summary_df
+}
+performance_summary(df_test$is_canceled, prob_cancellation)
+```
+
+## Use some factor variables
+```{r}
+df <- dat %>%
+  mutate(is_canceled = as.logical(is_canceled))
+df <- df %>%
+  filter(adr < 4000, 
+         adults <= 4,
+         babies <= 2,
+         booking_changes <= 5,
+         children <= 4, 
+         days_in_waiting_list <= 400,
+         previous_bookings_not_canceled <= 10,
+         previous_cancellations <= 10, 
+         required_car_parking_spaces <= 3,
+         days_in_waiting_list <= 20,
+         stays_in_weekend_nights <= 5,
+         total_of_special_requests <= 6)
+
+df <- df %>%
+  select(is_canceled, all_of(numeric_cols), all_of(factor_cols_short)) %>%
+  mutate(id = row_number())
+```
+
+```{r}
+
+df_train <- df %>%
+  sample_frac(.8)
+df_test <- anti_join(df, df_train, by = 'id')
+
+# Standardizing numerical columns in the training set
+# scale the training data
+train_attr <- attr(scale(df_train[, numeric_cols]), "scaled:scale")
+train_center <- attr(scale(df_train[, numeric_cols]), "scaled:center")
+
+df_train[, numeric_cols] <- scale(df_train[, numeric_cols])
+
+
+# Applying the same transformation to the test set
+df_test[, numeric_cols] <- scale(df_test[, numeric_cols], center = train_center, scale = train_attr)
+
+
+# Fit logistic regression model with factor variables
+model_with_factor <-
+  glm(
+    is_canceled ~ .,
+    family = binomial(link = "logit"),
+    data = df_train
+  )
+summary(model_with_factor)
+
+```
+```{r}
+prob_cancellation_with_factor <- predict(model_with_factor, df_test)
+performance_summary(df_test$is_canceled, prob_cancellation_with_factor)
+```
+
+
+
+
+```{r}
+
+
+
+
+# Perform variable selection using Ridge
+library(glmnet)
+x <- model.matrix(is_canceled ~ ., data = df_train)
+y <- df_train$is_canceled
+
+# alpha = 0 is ridge
+ridge_model <- cv.glmnet(x, y, family = "binomial", alpha = 0)
+best_lambda <- ridge_model$lambda.min
+
+# Get coefficients
+coefficients <- coef(ridge_model, s = best_lambda)
+coefficients <- as.matrix(coefficients)
+# Get names of nonzero coefficients (excluding intercept)
+selected_variables <- rownames(coefficients)[coefficients!=0]
+selected_variables <- selected_variables[selected_variables != "(Intercept)"]
+selected_variables <-unique(sapply(selected_variables, function(x) {
+  strsplit(x, "(?<=\\p{Ll})(?=\\p{Lu}|\\d)", perl = TRUE)[[1]][1]
+  }))
+
+# Create the model matrix
+x_select <- model.matrix(as.formula(paste("is_canceled ~", paste(selected_variables, collapse = " + "))), data = df_train)
+
+# Response variable
+y <- df_train$is_canceled
+
+# Fit the model
+selected_model <- glm.fit(x_select, y, family = binomial(link = "logit"))
+
+summary(selected_model)
+
+
+```
+
+
+
+```{r}
+test_data_matrix <- model.matrix(~ ., data = df_test)
+## dealing with missing columns
+# Get the column names of the training and test data
+train_colnames <- colnames(x)
+test_colnames <- colnames(test_data_matrix)
+
+
+# Add columns of zeros for missing dummy variables
+missing_colnames <- setdiff(train_colnames, test_colnames)
+for (colname in missing_colnames){
+  test_data_matrix <- cbind(test_data_matrix, 0)
+  colnames(test_data_matrix)[ncol(test_data_matrix)] <- colname
+}
+
+# Get the column names of the training and test data
+train_colnames <- colnames(x)
+test_colnames <- colnames(test_data_matrix)
+
+# Find the additional column names
+additional_colnames <- setdiff(test_colnames, train_colnames)
+
+# Remove columns in the test data that are not in the training data
+test_data_matrix <- test_data_matrix[, !(colnames(test_data_matrix) %in% additional_colnames)]
+
+test_data_matrix <- test_data_matrix[, train_colnames]
+
+
+
+prob_cancellation_ridge <- predict(ridge_model, newx = test_data_matrix, s = best_lambda, type = "response")
+
+performance_summary(df_test$is_canceled, prob_cancellation_ridge)
+```
+
+
+
+
+```{r}
+# Perform variable selection using Lasso
+library(glmnet)
+x <- model.matrix(is_canceled ~ ., data = df_train)
+y <- df_train$is_canceled
+
+# alpha = 1 is lasso
+lasso_model <- cv.glmnet(x, y, family = "binomial", alpha = 1)
+best_lambda <- lasso_model$lambda.min
+
+# Get coefficients
+coefficients <- coef(lasso_model, s = best_lambda)
+coefficients <- as.matrix(coefficients)
+# Get names of nonzero coefficients (excluding intercept)
+selected_variables <- rownames(coefficients)[coefficients!=0]
+selected_variables <- selected_variables[selected_variables != "(Intercept)"]
+selected_variables <-unique(sapply(selected_variables, function(x) {
+  strsplit(x, "(?<=\\p{Ll})(?=\\p{Lu}|\\d)", perl = TRUE)[[1]][1]
+  }))
+
+# Create the model matrix
+x_select <- model.matrix(as.formula(paste("is_canceled ~", paste(selected_variables, collapse = " + "))), data = df_train)
+
+# Response variable
+y <- df_train$is_canceled
+
+# Fit the model
+selected_model <- glm.fit(x_select, y, family = binomial(link = "logit"))
+
+summary(selected_model)
+```
+
+```{r}
+test_data_matrix <- model.matrix(~ ., data = df_test)
+## dealing with missing columns
+# Get the column names of the training and test data
+train_colnames <- colnames(x)
+test_colnames <- colnames(test_data_matrix)
+
+
+# Add columns of zeros for missing dummy variables
+missing_colnames <- setdiff(train_colnames, test_colnames)
+for (colname in missing_colnames){
+  test_data_matrix <- cbind(test_data_matrix, 0)
+  colnames(test_data_matrix)[ncol(test_data_matrix)] <- colname
+}
+
+# Get the column names of the training and test data
+train_colnames <- colnames(x)
+test_colnames <- colnames(test_data_matrix)
+
+# Find the additional column names
+additional_colnames <- setdiff(test_colnames, train_colnames)
+
+# Remove columns in the test data that are not in the training data
+test_data_matrix <- test_data_matrix[, !(colnames(test_data_matrix) %in% additional_colnames)]
+
+test_data_matrix <- test_data_matrix[, train_colnames]
+
+
+
+prob_cancellation_lasso <- predict(lasso_model, newx = test_data_matrix, s = best_lambda, type = "response")
+
+performance_summary(df_test$is_canceled, prob_cancellation_lasso)
+
+```
+
+Let's try elastic net
+```{r}
+# Load the library
+library(glmnet)
+
+# Create a matrix for the predictors (excluding the response variable)
+x <- model.matrix(is_canceled ~ . , df_train) 
+
+# Create a vector for the response variable
+y <- df_train$is_canceled
+
+# Create a grid of alpha values (you can modify the sequence as needed)
+alpha.grid <- seq(0, 1, by = 0.1)
+
+# Initialize variables to store the results
+best.cvm <- Inf  # Cross-validated mean squared error
+best.alpha <- NA  # Best alpha value
+best.lambda <- NA  # Best lambda value
+
+# Loop over alpha values
+for (alpha in alpha.grid) {
+  
+  # Fit the model and perform cross-validation
+  cv.fit <- cv.glmnet(x, y, family = "binomial", alpha = alpha)
+  
+  # Check if we get a smaller mean squared error
+  if (cv.fit$cvm[cv.fit$lambda == cv.fit$lambda.min] < best.cvm) {
+    best.cvm <- cv.fit$cvm[cv.fit$lambda == cv.fit$lambda.min]
+    best.alpha <- alpha
+    best.lambda <- cv.fit$lambda.min
+  }
+}
+
+# Print the best alpha and lambda values
+cat("Best alpha:", best.alpha, "\n")
+cat("Best lambda:", best.lambda, "\n")
+
+# Fit the final model
+final_elastic_net_model <- glmnet(x, y, family = "binomial", alpha = best.alpha, lambda = best.lambda)
+
+
+
+```
+
+
+```{r}
+test_data_matrix <- model.matrix(~ ., data = df_test)
+## dealing with missing columns
+# Get the column names of the training and test data
+train_colnames <- colnames(x)
+test_colnames <- colnames(test_data_matrix)
+
+
+# Add columns of zeros for missing dummy variables
+missing_colnames <- setdiff(train_colnames, test_colnames)
+for (colname in missing_colnames){
+  test_data_matrix <- cbind(test_data_matrix, 0)
+  colnames(test_data_matrix)[ncol(test_data_matrix)] <- colname
+}
+
+# Get the column names of the training and test data
+train_colnames <- colnames(x)
+test_colnames <- colnames(test_data_matrix)
+
+# Find the additional column names
+additional_colnames <- setdiff(test_colnames, train_colnames)
+
+# Remove columns in the test data that are not in the training data
+test_data_matrix <- test_data_matrix[, !(colnames(test_data_matrix) %in% additional_colnames)]
+
+test_data_matrix <- test_data_matrix[, train_colnames]
+
+
+
+prob_cancellation_elastic_net <- predict(final_elastic_net_model, newx = test_data_matrix, s = best_lambda, type = "response")
+
+performance_summary(df_test$is_canceled, prob_cancellation_elastic_net)
+```
