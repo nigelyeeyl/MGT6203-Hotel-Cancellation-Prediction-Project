@@ -1,0 +1,66 @@
+library(caTools)
+library(randomForest)
+
+# clear workspace
+rm(list=ls())
+
+# set seed
+set.seed(17)
+
+# obtain cleaned data from load_data_function
+source("Code/load_data_function.R")
+data <- load_cleaned_df(file_path)
+summary(data)
+
+# cast is_canceled to a factor 
+data$is_canceled <- as.factor(data$is_canceled)
+
+# split data, 70% for training and 30% for test 
+sample <- sample.split(data$is_canceled, SplitRatio = 0.7)
+train  <- subset(data, sample == TRUE)
+test   <- subset(data, sample == FALSE)
+
+# create random forest model testing for different number of variables tested at each split
+rf_list <- vector("list")
+for (i in 1:10){
+  rf_list[[i]] <- randomForest(x = train[,-2], 
+                               y = train[,2], 
+                               xtest = test[,-2], 
+                               ytest = test[,2],
+                               ntree = 300, 
+                               mtry = i)
+}
+rf_list
+
+# train rf model with ntree = 500
+rf_500 <- randomForest(x = train[,-2], 
+                       y = train[,2], 
+                       xtest = test[,-2], 
+                       ytest = test[,2],
+                       ntree = 500, 
+                       mtry = 8)
+rf_500
+
+# train rf model with ntree = 1000
+rf_1000 <- randomForest(x = train[,-2], 
+                        y = train[,2], 
+                        xtest = test[,-2], 
+                        ytest = test[,2],
+                        ntree = 1000, 
+                        mtry = 8)
+rf_1000
+
+# train rf model with ntree = 1500
+rf_1500 <- randomForest(x = train[,-2], 
+                        y = train[,2], 
+                        xtest = test[,-2], 
+                        ytest = test[,2],
+                        ntree = 1500, 
+                        mtry = 8)
+rf_1500
+
+# plot the importance of each of the variables to the random forest model
+varImpPlot(rf_list[[8]])
+varImpPlot(rf_500)
+varImpPlot(rf_1000)
+varImpPlot(rf_1500)
